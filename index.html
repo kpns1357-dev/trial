@@ -773,104 +773,7 @@
       .record-filter-btn { padding: 6px 10px; font-size: 0.72rem; }
     }
 
-    /* ── COMING SOON BANNER ── */
-    .coming-soon-banner {
-      background: linear-gradient(135deg, var(--surface) 0%, var(--bg2) 100%);
-      border: 1px solid var(--border-md);
-      border-radius: var(--radius);
-      margin-bottom: 20px;
-      overflow: hidden;
-      box-shadow: var(--shadow);
-      position: relative;
-    }
-    .coming-soon-banner::after {
-      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-      background: linear-gradient(90deg, var(--purple), var(--accent), var(--cyan));
-    }
-    .coming-soon-grid {
-      display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap: 24px;
-      padding: 24px;
-    }
-    .coming-soon-left {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .coming-soon-right {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: var(--radius-sm);
-      overflow: hidden;
-      border: 1px solid var(--border-md);
-      background: #020205;
-      min-height: 200px;
-    }
-    .coming-soon-img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      transition: transform 0.5s ease;
-    }
-    .coming-soon-right:hover .coming-soon-img {
-      transform: scale(1.04);
-    }
-    .coming-brand-tabs {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-top: 6px;
-    }
-    .coming-brand-tabs .btn-ghost.active {
-      background: var(--purple-dim);
-      color: var(--purple);
-      border-color: rgba(176,111,255,0.4);
-    }
-    .coming-brand-content {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 16px;
-      margin-top: 4px;
-      min-height: 120px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .coming-model-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--border);
-      font-size: 0.85rem;
-    }
-    .coming-model-item:last-child {
-      border-bottom: none;
-      padding-bottom: 0;
-    }
-    .coming-model-name {
-      font-weight: 700;
-      color: var(--text);
-    }
-    .coming-model-qty {
-      font-family: var(--mono);
-      font-weight: 600;
-      color: var(--accent-2);
-    }
 
-    @media (max-width: 840px) {
-      .coming-soon-grid {
-        grid-template-columns: 1fr;
-        gap: 20px;
-        padding: 16px;
-      }
-      .coming-soon-right {
-        min-height: 180px;
-      }
-    }
 
     @media (max-width: 480px) {
       .stat-strip, .record-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1028,32 +931,7 @@
           </div>
         </div>
 
-        <!-- Coming Soon Shipment Banner -->
-        <div class="coming-soon-banner">
-          <div class="coming-soon-grid">
-            <div class="coming-soon-left">
-              <span class="badge badge-purple" style="width:fit-content;text-transform:uppercase;font-size:0.65rem;letter-spacing:0.08em;padding:3px 10px;">🚀 Incoming Shipment</span>
-              <h2 style="font-family:var(--display);font-size:1.6rem;font-weight:800;line-height:1.2;background:linear-gradient(135deg,#eef0fa 30%,#8891b5 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin:4px 0 2px;">Coming Soon: 600+ Office Printers & Copiers</h2>
-              <p style="font-size:0.85rem;color:var(--text-2);line-height:1.5;margin-bottom:4px;">A massive shipment of 600 premium multi-function machines is arriving shortly, featuring top business copiers and office solutions.</p>
-              
-              <!-- Brand Tabs -->
-              <div class="coming-brand-tabs">
-                <button type="button" class="btn btn-ghost btn-sm active" id="btnComingCanon" onclick="switchComingBrand('canon')">Canon</button>
-                <button type="button" class="btn btn-ghost btn-sm" id="btnComingKonica" onclick="switchComingBrand('konica')">Konica Minolta</button>
-                <button type="button" class="btn btn-ghost btn-sm" id="btnComingXerox" onclick="switchComingBrand('xerox')">Xerox</button>
-                <button type="button" class="btn btn-ghost btn-sm" id="btnComingKyocera" onclick="switchComingBrand('kyocera')">Kyocera</button>
-              </div>
 
-              <!-- Brand Content Card -->
-              <div id="comingBrandContent" class="coming-brand-content">
-                <!-- Filled dynamically via JS -->
-              </div>
-            </div>
-            <div class="coming-soon-right">
-              <img src="coming_soon_printers.png" alt="Coming Soon Printers Marketing Flyer" class="coming-soon-img">
-            </div>
-          </div>
-        </div>
 
         <div class="stat-strip">
           <div class="stat-card" style="--stat-accent:var(--accent);">
@@ -2547,55 +2425,7 @@
   }
 
   // ── COMING SOON DATA & SWITCHER ──
-  const COMING_SOON_DATA = {
-    canon: [
-      { name: "Canon imageRUNNER ADVANCE DX C3835i (Color)", qty: 120 },
-      { name: "Canon imageRUNNER 2625i (B&W)", qty: 80 }
-    ],
-    konica: [
-      { name: "Konica Minolta bizhub C250i (Color)", qty: 100 },
-      { name: "Konica Minolta bizhub C360i (Color)", qty: 60 }
-    ],
-    xerox: [
-      { name: "Xerox VersaLink C405 (Color)", qty: 90 },
-      { name: "Xerox AltaLink B8145 (B&W)", qty: 50 }
-    ],
-    kyocera: [
-      { name: "Kyocera TASKalfa 2554ci (Color)", qty: 60 },
-      { name: "Kyocera ECOSYS M2040dn (B&W)", qty: 40 }
-    ]
-  };
 
-  window.switchComingBrand = function(brand) {
-    // Update active tab buttons
-    const btnIds = {
-      canon: "btnComingCanon",
-      konica: "btnComingKonica",
-      xerox: "btnComingXerox",
-      kyocera: "btnComingKyocera"
-    };
-    
-    Object.entries(btnIds).forEach(([b, id]) => {
-      const btn = $(id);
-      if (btn) btn.classList.toggle("active", b === brand);
-    });
-
-    const content = $("comingBrandContent");
-    if (!content) return;
-
-    const items = COMING_SOON_DATA[brand] || [];
-    if (items.length === 0) {
-      content.innerHTML = `<div class="empty-state">No upcoming printers listed for this brand</div>`;
-      return;
-    }
-
-    content.innerHTML = items.map(item => `
-      <div class="coming-model-item">
-        <span class="coming-model-name">${escapeHtml(item.name)}</span>
-        <span class="coming-model-qty">${item.qty} units incoming</span>
-      </div>
-    `).join("");
-  };
 
   function renderAll() {
     renderMachineGroup("Black & White","Box Pack","bwBoxPackInventoryTableBody","bwBoxPackOutOfStockTableBody","bwBoxPackEmptyState","bwBoxPackOutOfStockEmptyState","bwBoxPackInStockCount","bwBoxPackOutCount");
@@ -2611,8 +2441,7 @@
     updateDataLists();
     updateLowStockUI();
     updateSalesToday();
-    // Default show Canon coming soon
-    switchComingBrand('canon');
+
   }
 
   // ── LOAD (real-time) ──
