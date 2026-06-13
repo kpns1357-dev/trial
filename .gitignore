@@ -1,0 +1,6 @@
+# Firebase local credentials — NEVER upload this to GitHub
+.firebase_auth.json
+
+# Python cache
+__pycache__/
+*.pyc

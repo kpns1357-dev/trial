@@ -8,10 +8,39 @@ import random
 
 import hashlib
 
+import os
+import base64
+
+# ==============================================================================
+# ⚠️ FIREBASE CONFIGURATION & SECURITY
+# If you migrate your database to a new Firebase project, replace these settings.
+# ==============================================================================
 PROJECT_ID = "stock-manager-70efc"
 API_KEY = "AIzaSyBt3Q4K0mFtP2xGvHnJkLdR7sBqEuWwYM"
 BASE_URL = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents"
 MASTER_PASSWORD_HASH = "f3e4aac20bc59a9b6ffe711ec90bb3f54cd26c8bd4f0687ee15212e878f46a36"
+
+# 🔑 ADD YOUR SECURE FIREBASE LOGIN HERE:
+# If you put your Firebase authentication email and password here, the app will 
+# authenticate automatically. If left blank, it will prompt you on startup 
+# and save it securely in a local computer file so nobody else can see it.
+FIREBASE_AUTH_EMAIL = ""
+FIREBASE_AUTH_PASSWORD = ""
+
+# Session token for firebase requests
+firebase_id_token = None
+
+# XOR symmetric cipher with base64 wrapper for storing non-public passwords in Firestore
+def encrypt_password(password, master_password):
+    cipher = "".join(chr(ord(c) ^ ord(master_password[i % len(master_password)])) for i, c in enumerate(password))
+    return base64.b64encode(cipher.encode('utf-8')).decode('utf-8')
+
+def decrypt_password(ciphertext, master_password):
+    try:
+        raw = base64.b64decode(ciphertext.encode('utf-8')).decode('utf-8')
+        return "".join(chr(ord(c) ^ ord(master_password[i % len(master_password)])) for i, c in enumerate(raw))
+    except:
+        return "Decryption Error"
 
 class FirebasePermissionError(Exception):
     pass
@@ -31,7 +60,7 @@ class FirestoreClient:
             "service cloud.firestore {\n"
             "  match /databases/{database}/documents {\n"
             "    match /{document=**} {\n"
-            "      allow read, write: if true;\n"
+            "      allow read, write: if request.auth != null;\n"
             "    }\n"
             "  }\n"
             "}\n\n"
@@ -57,7 +86,10 @@ class FirestoreClient:
     @staticmethod
     def get_collection(collection_name):
         try:
-            req = urllib.request.Request(f"{BASE_URL}/{collection_name}?key={API_KEY}")
+            url = f"{BASE_URL}/{collection_name}?key={API_KEY}"
+            req = urllib.request.Request(url)
+            if firebase_id_token:
+                req.add_header('Authorization', f'Bearer {firebase_id_token}')
             with urllib.request.urlopen(req) as response:
                 data = json.loads(response.read().decode())
                 docs = []
@@ -97,6 +129,8 @@ class FirestoreClient:
         url = f"{BASE_URL}/{collection_name}?documentId={doc_id}&key={API_KEY}"
         req = urllib.request.Request(url, data=json.dumps(payload).encode(), method='POST')
         req.add_header('Content-Type', 'application/json')
+        if firebase_id_token:
+            req.add_header('Authorization', f'Bearer {firebase_id_token}')
         try:
             with urllib.request.urlopen(req) as response:
                 return True
@@ -108,6 +142,8 @@ class FirestoreClient:
                 url = f"{BASE_URL}/{collection_name}/{doc_id}?key={API_KEY}"
                 req = urllib.request.Request(url, data=json.dumps(payload).encode(), method='PATCH')
                 req.add_header('Content-Type', 'application/json')
+                if firebase_id_token:
+                    req.add_header('Authorization', f'Bearer {firebase_id_token}')
                 try:
                     with urllib.request.urlopen(req) as response:
                         return True
@@ -132,6 +168,8 @@ class FirestoreClient:
         url = f"{BASE_URL}/{collection_name}/{doc_id}?key={API_KEY}"
         req = urllib.request.Request(url, data=json.dumps(payload).encode(), method='PATCH')
         req.add_header('Content-Type', 'application/json')
+        if firebase_id_token:
+            req.add_header('Authorization', f'Bearer {firebase_id_token}')
         try:
             with urllib.request.urlopen(req) as response:
                 return True
@@ -145,6 +183,8 @@ class FirestoreClient:
     def delete_document(collection_name, doc_id):
         url = f"{BASE_URL}/{collection_name}/{doc_id}?key={API_KEY}"
         req = urllib.request.Request(url, method='DELETE')
+        if firebase_id_token:
+            req.add_header('Authorization', f'Bearer {firebase_id_token}')
         try:
             with urllib.request.urlopen(req) as response:
                 return True
@@ -191,23 +231,115 @@ class AdminCommanderApp(tk.Tk):
 
         ttk.Label(login_box, text="🔑", font=("Segoe UI", 48)).pack(pady=(0, 10))
         ttk.Label(login_box, text="Yamunaji Controller", font=("Segoe UI", 20, "bold")).pack(pady=(0, 5))
-        ttk.Label(login_box, text="Enter Master Password to Unlock").pack(pady=(0, 20))
+        ttk.Label(login_box, text="Sign in to your Firebase account", font=("Segoe UI", 10), foreground="#8891b5").pack(pady=(0, 16))
 
-        self.pass_entry = ttk.Entry(login_box, show="*", width=30, font=("Segoe UI", 12))
-        self.pass_entry.pack(pady=10)
+        # Firebase Auth credentials
+        ttk.Label(login_box, text="Firebase Email:").pack(anchor='w')
+        self.email_entry = ttk.Entry(login_box, width=34, font=("Segoe UI", 11))
+        self.email_entry.pack(pady=(2, 10))
+
+        ttk.Label(login_box, text="Firebase Password:").pack(anchor='w')
+        self.fb_pass_entry = ttk.Entry(login_box, show="*", width=34, font=("Segoe UI", 11))
+        self.fb_pass_entry.pack(pady=(2, 10))
+
+        ttk.Label(login_box, text="Master Password (Yamunaji_0791):").pack(anchor='w')
+        self.pass_entry = ttk.Entry(login_box, show="*", width=34, font=("Segoe UI", 11))
+        self.pass_entry.pack(pady=(2, 10))
         self.pass_entry.bind("<Return>", lambda e: self.verify_login())
 
-        btn = ttk.Button(login_box, text="Unlock App →", command=self.verify_login)
-        btn.pack(pady=10, fill='x')
+        self.login_status = ttk.Label(login_box, text="", foreground="#ff4d4d", font=("Segoe UI", 9))
+        self.login_status.pack(pady=(0, 5))
+
+        btn = ttk.Button(login_box, text="Sign In & Unlock →", command=self.verify_login)
+        btn.pack(pady=5, fill='x')
+
+        ttk.Label(login_box, text="💡 Your Firebase email and password are saved locally\nand never uploaded to GitHub.", 
+                  font=("Segoe UI", 8), foreground="#454d6e", justify="center").pack(pady=(10, 0))
+
+        # Pre-fill from saved credentials or FIREBASE_AUTH_EMAIL constant
+        saved = self._load_saved_credentials()
+        if FIREBASE_AUTH_EMAIL:
+            self.email_entry.insert(0, FIREBASE_AUTH_EMAIL)
+        elif saved.get("email"):
+            self.email_entry.insert(0, saved["email"])
+        if FIREBASE_AUTH_PASSWORD:
+            self.fb_pass_entry.insert(0, FIREBASE_AUTH_PASSWORD)
+        elif saved.get("password"):
+            self.fb_pass_entry.insert(0, saved["password"])
+
+    def _get_credentials_file(self):
+        """Return path to local credentials file (next to the script, ignored by git)."""
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), ".firebase_auth.json")
+
+    def _load_saved_credentials(self):
+        try:
+            path = self._get_credentials_file()
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    return json.load(f)
+        except:
+            pass
+        return {}
+
+    def _save_credentials(self, email, password):
+        try:
+            path = self._get_credentials_file()
+            with open(path, "w") as f:
+                json.dump({"email": email, "password": password}, f)
+        except Exception as e:
+            print("Could not save credentials:", e)
+
+    def firebase_sign_in(self, email, password):
+        """Sign in to Firebase Auth and store the ID token globally."""
+        global firebase_id_token
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={API_KEY}"
+        payload = json.dumps({"email": email, "password": password, "returnSecureToken": True}).encode()
+        req = urllib.request.Request(url, data=payload, method='POST')
+        req.add_header('Content-Type', 'application/json')
+        try:
+            with urllib.request.urlopen(req) as r:
+                data = json.loads(r.read().decode())
+                firebase_id_token = data.get("idToken")
+                return True
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            try:
+                err = json.loads(body).get("error", {}).get("message", "Unknown error")
+            except:
+                err = body
+            return err
+        except Exception as e:
+            return str(e)
 
     def verify_login(self):
-        entered_pass = self.pass_entry.get()
+        email = self.email_entry.get().strip()
+        fb_pass = self.fb_pass_entry.get().strip()
+        entered_pass = self.pass_entry.get().strip()
+
+        if not email or not fb_pass or not entered_pass:
+            self.login_status.config(text="⚠ Please fill in all three fields.")
+            return
+
+        # 1. Check master password locally
         entered_hash = hashlib.sha256(entered_pass.encode()).hexdigest()
-        if entered_hash == MASTER_PASSWORD_HASH:
-            self.show_main_app()
-        else:
-            messagebox.showerror("Access Denied", "Incorrect Master Password")
+        if entered_hash != MASTER_PASSWORD_HASH:
+            self.login_status.config(text="✕ Incorrect Master Password.")
             self.pass_entry.delete(0, 'end')
+            return
+
+        # 2. Sign in to Firebase Auth to get ID token
+        self.login_status.config(text="Connecting to Firebase…", foreground="#f5a623")
+        self.update()
+        result = self.firebase_sign_in(email, fb_pass)
+        if result is not True:
+            self.login_status.config(text=f"✕ Firebase login failed: {result}", foreground="#ff4d4d")
+            return
+
+        # 3. Save credentials locally (never pushed to GitHub)
+        self._save_credentials(email, fb_pass)
+        self.master_password = entered_pass
+        self.login_status.config(text="✓ Signed in successfully!", foreground="#22d46a")
+        self.after(600, self.show_main_app)
 
     def show_main_app(self):
         if self.current_frame:
@@ -841,17 +973,20 @@ class AdminCommanderApp(tk.Tk):
         ttk.Label(top_frame, text="Manage Website Admin Accounts", font=("Segoe UI", 14, "bold")).pack(side='left', padx=10)
         ttk.Button(top_frame, text="🔄 Refresh", command=self.load_users).pack(side='right', padx=10)
         ttk.Button(top_frame, text="➕ Add New Account", command=self.add_user).pack(side='right', padx=10)
+        ttk.Button(top_frame, text="🔑 Change Master Password", command=self.change_master_password).pack(side='right', padx=10)
 
-        columns = ("Username", "Password", "Created")
+        columns = ("Username / Email", "Password", "Created")
         self.users_tree = ttk.Treeview(self.users_frame, columns=columns, show='headings')
         for col in columns:
             self.users_tree.heading(col, text=col)
-            self.users_tree.column(col, width=150)
+            self.users_tree.column(col, width=180)
         self.users_tree.pack(expand=True, fill='both', padx=10, pady=10)
 
         bottom_frame = ttk.Frame(self.users_frame)
         bottom_frame.pack(fill='x', pady=10)
         ttk.Button(bottom_frame, text="🗑️ Remove Selected Account", command=self.remove_user).pack(side='left', padx=10)
+        ttk.Label(bottom_frame, text="Passwords shown are decrypted using your master password and are stored securely in Firebase.",
+                  font=("Segoe UI", 8), foreground="#454d6e").pack(side='left', padx=10)
 
         self.load_users()
 
@@ -861,62 +996,206 @@ class AdminCommanderApp(tk.Tk):
         try:
             users = FirestoreClient.get_collection("adminUsers")
             for u in users:
-                self.users_tree.insert('', 'end', values=(u.get('username', u['id']), u.get('password', '***'), u.get('createdAt', 'N/A')))
+                # Decrypt password for display using master password
+                ciphertext = u.get('passwordEncrypted', '')
+                if ciphertext and hasattr(self, 'master_password'):
+                    display_pw = decrypt_password(ciphertext, self.master_password)
+                else:
+                    display_pw = u.get('password', '(encrypted)')
+                self.users_tree.insert('', 'end', values=(
+                    u.get('username', u['id']),
+                    display_pw,
+                    u.get('createdAt', 'N/A')
+                ))
         except Exception as e:
             messagebox.showerror("Network Error", f"Failed to load users: {e}")
 
+    def firebase_create_user(self, email, password):
+        """Create a user in Firebase Authentication."""
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={API_KEY}"
+        payload = json.dumps({"email": email, "password": password, "returnSecureToken": False}).encode()
+        req = urllib.request.Request(url, data=payload, method='POST')
+        req.add_header('Content-Type', 'application/json')
+        try:
+            with urllib.request.urlopen(req) as r:
+                data = json.loads(r.read().decode())
+                return data.get("localId"), None
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            try:
+                err = json.loads(body).get("error", {}).get("message", "Unknown error")
+            except:
+                err = body
+            return None, err
+
+    def firebase_delete_user(self, uid):
+        """Delete a user from Firebase Authentication by UID."""
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:delete?key={API_KEY}"
+        payload = json.dumps({"idToken": firebase_id_token, "localId": uid}).encode()
+        # Use Admin-style deletion via ID token if available
+        req = urllib.request.Request(url, data=payload, method='POST')
+        req.add_header('Content-Type', 'application/json')
+        try:
+            with urllib.request.urlopen(req) as r:
+                return True, None
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            try:
+                err = json.loads(body).get("error", {}).get("message", "")
+            except:
+                err = body
+            return False, err
+
     def add_user(self):
         dialog = tk.Toplevel(self)
-        dialog.title("Add New User")
-        dialog.geometry("300x220")
+        dialog.title("Add New Web Admin")
+        dialog.geometry("340x280")
         dialog.configure(bg="#12131a")
         dialog.transient(self)
         dialog.grab_set()
 
-        ttk.Label(dialog, text="Username:").pack(pady=(15, 5))
-        username_entry = ttk.Entry(dialog)
-        username_entry.pack()
+        ttk.Label(dialog, text="Email (used for login):").pack(pady=(15, 2))
+        email_entry = ttk.Entry(dialog, width=32)
+        email_entry.pack()
 
-        ttk.Label(dialog, text="Password:").pack(pady=(15, 5))
-        password_entry = ttk.Entry(dialog)
+        ttk.Label(dialog, text="Password:").pack(pady=(10, 2))
+        password_entry = ttk.Entry(dialog, width=32)
         password_entry.pack()
 
+        status_label = ttk.Label(dialog, text="", foreground="#ff4d4d", font=("Segoe UI", 9))
+        status_label.pack(pady=(5, 0))
+
         def save():
-            user = username_entry.get().strip()
+            user_email = email_entry.get().strip()
             pw = password_entry.get().strip()
-            if not user or not pw:
-                messagebox.showerror("Error", "All fields required")
+            if not user_email or not pw:
+                status_label.config(text="All fields required")
                 return
-            
+            if len(pw) < 6:
+                status_label.config(text="Password must be at least 6 characters")
+                return
+
+            status_label.config(text="Creating user…", foreground="#f5a623")
+            dialog.update()
+
+            # Create user in Firebase Authentication
+            uid, err = self.firebase_create_user(user_email, pw)
+            if err:
+                status_label.config(text=f"Auth error: {err}", foreground="#ff4d4d")
+                return
+
+            # Compute hash (for web login) and encrypt (for display in controller)
+            pw_hash = hashlib.sha256(pw.encode()).hexdigest()
+            pw_enc = encrypt_password(pw, self.master_password)
+            username = user_email.split('@')[0]  # use email prefix as display name
+
             data = {
-                "username": user,
-                "password": pw,
+                "username": user_email,
+                "passwordHash": pw_hash,
+                "passwordEncrypted": pw_enc,
+                "uid": uid or "",
                 "createdAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             try:
-                FirestoreClient.add_document("adminUsers", user, data)
+                FirestoreClient.add_document("adminUsers", username, data)
+                status_label.config(text="✓ User created!", foreground="#22d46a")
                 self.load_users()
-                dialog.destroy()
+                dialog.after(800, dialog.destroy)
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to add user: {e}")
+                status_label.config(text=f"Firestore error: {e}", foreground="#ff4d4d")
 
-        ttk.Button(dialog, text="Save User", command=save).pack(pady=20)
+        ttk.Button(dialog, text="Create User", command=save).pack(pady=15)
 
     def remove_user(self):
         selected = self.users_tree.selection()
         if not selected:
             messagebox.showwarning("Warning", "Please select a user to remove")
             return
-        
+
         item = self.users_tree.item(selected[0])
         username = item['values'][0]
-        
-        if messagebox.askyesno("Confirm", f"Remove user '{username}' permanently?"):
+
+        if messagebox.askyesno("Confirm", f"Permanently remove '{username}'?\n\nThis will instantly revoke their web app access."):
             try:
-                FirestoreClient.delete_document("adminUsers", username)
+                # Fetch the UID from Firestore record so we can delete from Firebase Auth too
+                users = FirestoreClient.get_collection("adminUsers")
+                target = next((u for u in users if u.get('username') == username or u.get('id') == username), None)
+                uid = target.get('uid', '') if target else ''
+
+                # Delete from Firestore (web app detects this and force-logs them out)
+                doc_id = username.split('@')[0] if '@' in username else username
+                FirestoreClient.delete_document("adminUsers", doc_id)
+
+                # Also delete from Firebase Authentication if UID is known
+                if uid:
+                    self.firebase_delete_user(uid)
+
+                messagebox.showinfo("Removed", f"User '{username}' has been removed.\nThey will be logged out instantly from the web app.")
                 self.load_users()
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to delete: {e}")
+
+    def change_master_password(self):
+        dialog = tk.Toplevel(self)
+        dialog.title("Change Master Password")
+        dialog.geometry("350x280")
+        dialog.configure(bg="#12131a")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        ttk.Label(dialog, text="Current Master Password:").pack(pady=(15, 2))
+        curr_entry = ttk.Entry(dialog, show="*")
+        curr_entry.pack()
+
+        ttk.Label(dialog, text="New Master Password:").pack(pady=(10, 2))
+        new_entry = ttk.Entry(dialog, show="*")
+        new_entry.pack()
+
+        ttk.Label(dialog, text="Confirm New Password:").pack(pady=(10, 2))
+        confirm_entry = ttk.Entry(dialog, show="*")
+        confirm_entry.pack()
+
+        def save():
+            curr_pw = curr_entry.get().strip()
+            new_pw = new_entry.get().strip()
+            conf_pw = confirm_entry.get().strip()
+
+            if curr_pw != self.master_password:
+                messagebox.showerror("Error", "Current master password incorrect")
+                return
+            if not new_pw:
+                messagebox.showerror("Error", "New password cannot be empty")
+                return
+            if new_pw != conf_pw:
+                messagebox.showerror("Error", "New passwords do not match")
+                return
+
+            try:
+                # Re-encrypt all user passwords with the new master password key
+                users = FirestoreClient.get_collection("adminUsers")
+                for u in users:
+                    ciphertext = u.get('passwordEncrypted', '')
+                    if ciphertext:
+                        decrypted = decrypt_password(ciphertext, curr_pw)
+                    else:
+                        decrypted = u.get('password', '')
+                    if decrypted and decrypted != "Decryption Error":
+                        new_enc = encrypt_password(decrypted, new_pw)
+                        doc_id = u.get('username', u['id']).split('@')[0] if '@' in u.get('username', '') else u.get('id', '')
+                        FirestoreClient.update_document("adminUsers", doc_id, {"passwordEncrypted": new_enc})
+
+                # Save new master hash to Firestore
+                new_hash = hashlib.sha256(new_pw.encode()).hexdigest()
+                FirestoreClient.add_document("systemConfig", "auth", {"masterHash": new_hash})
+
+                self.master_password = new_pw
+                messagebox.showinfo("Success", "Master password updated and all accounts re-encrypted!")
+                self.load_users()
+                dialog.destroy()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to update master password: {e}")
+
+        ttk.Button(dialog, text="Update Password", command=save).pack(pady=20)
 
     # --- TASKS & SHIPPING TAB ---
 

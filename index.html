@@ -1681,6 +1681,7 @@
 <!-- AUTH — plain script, completely independent of Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script>
   (function() {
     var AUTH_KEY = "ym_admin_auth";
@@ -1720,48 +1721,39 @@
         overlay.classList.add("hidden");
       });
 
-      if(btnLogout) btnLogout.addEventListener("click", function() {
-        localStorage.removeItem(AUTH_KEY);
-        updateAdminUI();
-        if(typeof showScreen === "function") showScreen("home");
-      });
 
       async function tryAuth() {
         var user = (usernameInput.value || "").trim();
         var pass = (passInput.value || "").trim();
         if (!user || !pass) {
-          err.textContent = "Please enter username and password.";
+          err.textContent = "Please enter email and password.";
           return;
         }
         
-        authBtn.textContent = "Checking...";
+        authBtn.textContent = "Signing in...";
         authBtn.disabled = true;
+        err.textContent = "";
         
-        // Wait for Firebase to be ready if needed
+        // Wait for Firebase to be ready
         if (!window.db && typeof initFirebase === "function") initFirebase();
         
         try {
-          // Hardcoded fallback for the original owner (hashed)
-          const buffer = new TextEncoder().encode(pass);
-          const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-          const passHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-          
-          if (user === "admin" && passHash === "f3e4aac20bc59a9b6ffe711ec90bb3f54cd26c8bd4f0687ee15212e878f46a36") {
-            grantAccess();
-            return;
-          }
-          
-          if (!window.db) throw new Error("Database not connected");
-          
-          const userDoc = await window.db.collection("adminUsers").doc(user).get();
-          if (userDoc.exists && userDoc.data().password === pass) {
-            grantAccess();
-          } else {
-            err.textContent = "Incorrect username or password.";
-          }
+          // Sign in with Firebase Authentication
+          if (!firebase.auth) throw new Error("Firebase Auth not loaded.");
+          const userCredential = await firebase.auth().signInWithEmailAndPassword(user, pass);
+          localStorage.setItem("ym_admin_user", userCredential.user.email);
+          grantAccess();
         } catch(e) {
           console.error(e);
-          err.textContent = "Error connecting to server. Check internet.";
+          if (e.code === "auth/user-not-found" || e.code === "auth/wrong-password" || e.code === "auth/invalid-credential") {
+            err.textContent = "Incorrect email or password.";
+          } else if (e.code === "auth/invalid-email") {
+            err.textContent = "Invalid email format.";
+          } else if (e.code === "auth/too-many-requests") {
+            err.textContent = "Too many attempts. Try again later.";
+          } else {
+            err.textContent = "Error: " + (e.message || "Check internet connection.");
+          }
         } finally {
           authBtn.textContent = "Sign In →";
           authBtn.disabled = false;
@@ -1776,6 +1768,14 @@
         passInput.value = "";
         err.textContent = "";
       }
+
+      if(btnLogout) btnLogout.addEventListener("click", async function() {
+        try { await firebase.auth().signOut(); } catch(e) {}
+        localStorage.removeItem(AUTH_KEY);
+        localStorage.removeItem("ym_admin_user");
+        updateAdminUI();
+        if(typeof showScreen === "function") showScreen("home");
+      });
 
       if(authBtn) authBtn.addEventListener("click", tryAuth);
       if(passInput) passInput.addEventListener("keydown", function(e) { if (e.key === "Enter") tryAuth(); });
