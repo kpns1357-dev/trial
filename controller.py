@@ -80,7 +80,7 @@ class FirestoreClient:
         txt.insert("1.0", help_text)
         txt.config(state="disabled")
         
-        btn = tk.Button(dialog, text="Close", command=dialog.destroy, bg="#1f2235", fg="#eef0fa", activebackground="#2d314d", borderwidth=0, padding=8, font=('Segoe UI', 10, 'bold'))
+        btn = tk.Button(dialog, text="Close", command=dialog.destroy, bg="#1f2235", fg="#eef0fa", activebackground="#2d314d", borderwidth=0, font=('Segoe UI', 10, 'bold'))
         btn.pack(pady=15)
 
     @staticmethod
